@@ -16,20 +16,16 @@ jobs:
 
       - name: Extract ChatApp
         run: |
-          mkdir project
+          mkdir -p project
           unzip -q ChatAppFirebaseConnected.zip -d project
-
           echo "Extracted files:"
           find project -maxdepth 3 -type f | head -50
 
       - name: Find Android project
         run: |
           PROJECT_DIR=$(dirname "$(find project -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -1)")
-
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-          echo "Android project:"
-          echo "$PROJECT_DIR"
+          echo "Android project: $PROJECT_DIR"
 
       - name: Fix AndroidX
         run: |
@@ -41,41 +37,11 @@ jobs:
           cd "$PROJECT_DIR"
 
           if [ -f "app/build.gradle" ]; then
-            cat >> app/build.gradle <<'EOF'
-
-            // CI JVM compatibility
-            android {
-                compileOptions {
-                    sourceCompatibility JavaVersion.VERSION_17
-                    targetCompatibility JavaVersion.VERSION_17
-                }
-            }
-
-            tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                kotlinOptions {
-                    jvmTarget = "17"
-                }
-            }
-            EOF
+            printf '\nandroid {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n}\n\ntasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {\n    kotlinOptions {\n        jvmTarget = "17"\n    }\n}\n' >> app/build.gradle
           fi
 
           if [ -f "app/build.gradle.kts" ]; then
-            cat >> app/build.gradle.kts <<'EOF'
-
-            // CI JVM compatibility
-            android {
-                compileOptions {
-                    sourceCompatibility = JavaVersion.VERSION_17
-                    targetCompatibility = JavaVersion.VERSION_17
-                }
-            }
-
-            tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-                kotlinOptions {
-                    jvmTarget = "17"
-                }
-            }
-            EOF
+            printf '\nandroid {\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n    }\n}\n\ntasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {\n    kotlinOptions {\n        jvmTarget = "17"\n    }\n}\n' >> app/build.gradle.kts
           fi
 
       - name: Set up Java
