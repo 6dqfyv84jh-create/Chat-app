@@ -2,6 +2,7 @@ name: Build ChatApp APK
 
 on:
   workflow_dispatch:
+
   push:
     branches:
       - main
@@ -11,63 +12,91 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract ChatApp
-        run: |
-          mkdir -p project
-          unzip -q ChatAppFirebaseConnected.zip -d project
-          echo "Extracted files:"
-          find project -maxdepth 3 -type f | head -50
-
-      - name: Find Android project
-        run: |
-          PROJECT_DIR=$(dirname "$(find project -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -1)")
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Android project: $PROJECT_DIR"
-
-      - name: Fix AndroidX
-        run: |
-          echo "android.useAndroidX=true" >> "$PROJECT_DIR/gradle.properties"
-          echo "android.enableJetifier=true" >> "$PROJECT_DIR/gradle.properties"
-
-      - name: Fix Java and Kotlin JVM target
-        run: |
-          cd "$PROJECT_DIR"
-
-          if [ -f "app/build.gradle" ]; then
-            printf '\nandroid {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n}\n\ntasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {\n    kotlinOptions {\n        jvmTarget = "17"\n    }\n}\n' >> app/build.gradle
-          fi
-
-          if [ -f "app/build.gradle.kts" ]; then
-            printf '\nandroid {\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n    }\n}\n\ntasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {\n    kotlinOptions {\n        jvmTarget = "17"\n    }\n}\n' >> app/build.gradle.kts
-          fi
-
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
+      - name: Set up Gradle 8.10
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10'
 
-      - name: Build APK
+      - name: Verify Android project
         run: |
-          cd "$PROJECT_DIR"
+          echo "Checking project files..."
 
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew assembleDebug
-          else
-            gradle assembleDebug
-          fi
+          test -f settings.gradle.kts
+          test -f build.gradle.kts
+          test -f app/build.gradle.kts
+          test -f app/src/main/AndroidManifest.xml
+          test -f app/src/main/java/com/example/chatapp/MainActivity.kt
+
+          echo "Project files found."
+
+      - name: Fix Java and Kotlin JVM target
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("app/build.gradle.kts")
+
+          text = p.read_text()
+
+          if "kotlinOptions" in text:
+              print("Kotlin configuration already exists.")
+          else:
+              text += """
+
+          kotlin {
+              jvmToolchain(17)
+          }
+
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+          """
+
+              p.write_text(text)
+
+          print("JVM configuration checked.")
+          PY
+
+      - name: Show Java version
+        run: java -version
+
+      - name: Show Gradle version
+        run: gradle --version
+
+      - name: Clean project
+        run: |
+          gradle clean --no-daemon
+
+      - name: Build Debug APK
+        run: |
+          gradle :app:assembleDebug \
+            --no-daemon \
+            --stacktrace
+
+      - name: Find APK
+        run: |
+          echo "APK files:"
+          find app/build/outputs/apk \
+            -type f \
+            -name "*.apk" \
+            -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ChatApp-debug
-          path: '**/app/build/outputs/apk/debug/app-debug.apk'
+          name: ChatApp-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
