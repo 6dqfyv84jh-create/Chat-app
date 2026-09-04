@@ -14,9 +14,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract Android project
+      - name: Extract ChatApp
         run: |
-          unzip -o ChatAppFirebaseConnected.zip -d project
+          mkdir project
+          unzip -q ChatAppFirebaseConnected.zip -d project
+          echo "Extracted files:"
+          find project -maxdepth 3 -type f | head -50
+
+      - name: Find Android project
+        run: |
+          PROJECT_DIR=$(dirname "$(find project -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -1)")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project: $PROJECT_DIR"
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -31,10 +40,16 @@ jobs:
 
       - name: Build APK
         run: |
-          gradle -p project :app:assembleDebug
+          cd "$PROJECT_DIR"
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug
+          else
+            gradle assembleDebug
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ChatApp-debug
-          path: project/app/build/outputs/apk/debug/app-debug.apk
+          path: '**/app/build/outputs/apk/debug/app-debug.apk'
